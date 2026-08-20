@@ -33,7 +33,7 @@ func TestCreateGetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{User: 42, App: "dmini"}
+	actor := Actor{App: "dmini"}
 	id, _, err := st.Create(actor, sample("demo-layout", 42))
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestCreateGetDelete(t *testing.T) {
 	if doc.Source != "dmini" {
 		t.Fatalf("source %q", doc.Source)
 	}
-	if err := st.Delete(id, Actor{User: 99, App: "dmini"}); !errors.Is(err, ErrForbidden) {
+	if err := st.Delete(id, Actor{App: "web"}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
 	}
 	if err := st.Delete(id, actor); err != nil {
@@ -72,7 +72,7 @@ func TestRenameAndList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{User: 7, App: "dmini"}
+	actor := Actor{App: "dmini"}
 	if _, _, err := st.Create(actor, sample("alpha-one", 7)); err != nil {
 		t.Fatal(err)
 	}
@@ -126,9 +126,8 @@ func TestAppIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dmini := Actor{User: 42, App: "dmini"}
-	web := Actor{User: 42, App: "web"}
-	webAdmin := Actor{User: 1, App: "web", Admin: true}
+	dmini := Actor{App: "dmini"}
+	web := Actor{App: "web"}
 
 	id, raw, err := st.Create(dmini, sample("app-demo", 42))
 	if err != nil {
@@ -168,8 +167,8 @@ func TestAppIsolation(t *testing.T) {
 	if _, err := st.Replace(id, web, sample("app-demo", 42)); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("web replace: %v", err)
 	}
-	if err := st.Delete(id, webAdmin); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("web admin delete: %v", err)
+	if err := st.Delete(id, web); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("web delete: %v", err)
 	}
 	if _, _, err := st.Rename(id, "app-renamed", web); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("web rename: %v", err)
@@ -178,7 +177,7 @@ func TestAppIsolation(t *testing.T) {
 	if _, err := st.Replace(id, dmini, sample("app-demo", 42)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Delete(id, Actor{User: 99, App: "dmini", Admin: true}); err != nil {
+	if err := st.Delete(id, dmini); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -192,10 +191,10 @@ func TestLegacyLayoutsBelongToDmini(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Delete("legacy", Actor{User: 5, App: "web"}); !errors.Is(err, ErrForbidden) {
+	if err := st.Delete("legacy", Actor{App: "web"}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("web delete legacy: %v", err)
 	}
-	if err := st.Delete("legacy", Actor{User: 5, App: "dmini"}); err != nil {
+	if err := st.Delete("legacy", Actor{App: "dmini"}); err != nil {
 		t.Fatal(err)
 	}
 }

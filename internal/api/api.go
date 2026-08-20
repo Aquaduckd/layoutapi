@@ -14,8 +14,6 @@ import (
 var (
 	errUnauthorized   = errors.New("missing or invalid bearer token")
 	errWritesDisabled = errors.New("writes are disabled: no write tokens are configured")
-	errMissingUser    = errors.New("missing X-User-Id header")
-	errInvalidUser    = errors.New("invalid X-User-Id header")
 )
 
 type Server struct {
@@ -205,26 +203,7 @@ func (s *Server) writeActor(w http.ResponseWriter, r *http.Request) (store.Actor
 		writeError(w, status, err.Error())
 		return store.Actor{}, false
 	}
-	actor, err := actorFrom(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
-		return store.Actor{}, false
-	}
-	actor.App = app
-	return actor, true
-}
-
-func actorFrom(r *http.Request) (store.Actor, error) {
-	raw := strings.TrimSpace(r.Header.Get("X-User-Id"))
-	if raw == "" {
-		return store.Actor{}, errMissingUser
-	}
-	user, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return store.Actor{}, errInvalidUser
-	}
-	admin := strings.EqualFold(r.Header.Get("X-Admin"), "true")
-	return store.Actor{User: user, Admin: admin}, nil
+	return store.Actor{App: app}, true
 }
 
 func readBody(r *http.Request) ([]byte, error) {

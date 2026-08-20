@@ -20,9 +20,7 @@ var (
 )
 
 type Actor struct {
-	User  int64
-	App   string
-	Admin bool
+	App string
 }
 
 type Filter struct {
@@ -148,9 +146,6 @@ func (s *Store) Create(actor Actor, raw []byte) (string, []byte, error) {
 		return "", nil, err
 	}
 	id := layout.IDFromName(doc.Name)
-	if !actor.Admin && actor.User != doc.User {
-		return "", nil, fmt.Errorf("%w: body user does not match caller", ErrForbidden)
-	}
 	doc.Source = actor.App
 	body, err := encodeDoc(doc)
 	if err != nil {
@@ -179,11 +174,8 @@ func (s *Store) Replace(id string, actor Actor, raw []byte) ([]byte, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	if err := checkWrite(actor, rec.user, rec.source); err != nil {
+	if err := checkWrite(actor, rec.source); err != nil {
 		return nil, err
-	}
-	if !actor.Admin && actor.User != doc.User {
-		return nil, fmt.Errorf("%w: cannot change owner", ErrForbidden)
 	}
 	doc.Source = rec.source
 	body, err := encodeDoc(doc)
@@ -204,7 +196,7 @@ func (s *Store) Delete(id string, actor Actor) error {
 	if !ok {
 		return ErrNotFound
 	}
-	if err := checkWrite(actor, rec.user, rec.source); err != nil {
+	if err := checkWrite(actor, rec.source); err != nil {
 		return err
 	}
 	if err := os.Remove(s.path(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -226,7 +218,7 @@ func (s *Store) Rename(id, newName string, actor Actor) (string, []byte, error) 
 	if !ok {
 		return "", nil, ErrNotFound
 	}
-	if err := checkWrite(actor, rec.user, rec.source); err != nil {
+	if err := checkWrite(actor, rec.source); err != nil {
 		return "", nil, err
 	}
 	if newID != id {
@@ -308,7 +300,7 @@ func requireApp(actor Actor) error {
 	return nil
 }
 
-func checkWrite(actor Actor, owner int64, source string) error {
+func checkWrite(actor Actor, source string) error {
 	if err := requireApp(actor); err != nil {
 		return err
 	}
@@ -316,8 +308,5 @@ func checkWrite(actor Actor, owner int64, source string) error {
 	if actor.App != source {
 		return fmt.Errorf("%w: layout belongs to %s", ErrForbidden, source)
 	}
-	if actor.Admin || actor.User == owner {
-		return nil
-	}
-	return ErrForbidden
+	return nil
 }

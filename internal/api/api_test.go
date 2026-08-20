@@ -44,7 +44,6 @@ func TestHTTPFlow(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer secret-dmini")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -66,7 +65,6 @@ func TestHTTPFlow(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer secret-dmini")
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -91,7 +89,6 @@ func TestReadsArePublicWritesNeedToken(t *testing.T) {
 	}
 
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
-	req.Header.Set("X-User-Id", "11")
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +99,6 @@ func TestReadsArePublicWritesNeedToken(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer secret-web")
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -121,7 +117,6 @@ func TestRevokedTokenRejected(t *testing.T) {
 
 	create := func(base, secret string) int {
 		req, _ := http.NewRequest(http.MethodPost, base+"/v1/layouts", bytes.NewReader(sampleBody()))
-		req.Header.Set("X-User-Id", "11")
 		req.Header.Set("Authorization", "Bearer "+secret)
 		res, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -142,7 +137,6 @@ func TestRevokedTokenRejected(t *testing.T) {
 func TestWritesDisabledWithoutTokens(t *testing.T) {
 	srv := testServer(t)
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer anything")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -173,7 +167,7 @@ func TestParseTokenListAndFile(t *testing.T) {
 	}
 }
 
-func TestMissingUserHeader(t *testing.T) {
+func TestWriteDoesNotNeedDiscordUserHeader(t *testing.T) {
 	srv := testServer(t, WriteKey{Name: "dmini", Secret: "secret"})
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
 	req.Header.Set("Authorization", "Bearer secret")
@@ -182,15 +176,15 @@ func TestMissingUserHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status %d", res.StatusCode)
+	if res.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("status %d %s", res.StatusCode, b)
 	}
 }
 
 func TestFullList(t *testing.T) {
 	srv := testServer(t, WriteKey{Name: "dmini", Secret: "secret"})
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer secret")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -218,7 +212,6 @@ func TestAppCannotModifyOtherAppLayout(t *testing.T) {
 	srv := testServer(t, WriteKey{Name: "dmini", Secret: "secret-dmini"}, WriteKey{Name: "web", Secret: "secret-web"})
 
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer secret-dmini")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -244,8 +237,6 @@ func TestAppCannotModifyOtherAppLayout(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)
-	req.Header.Set("X-User-Id", "11")
-	req.Header.Set("X-Admin", "true")
 	req.Header.Set("Authorization", "Bearer secret-web")
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
@@ -257,7 +248,6 @@ func TestAppCannotModifyOtherAppLayout(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)
-	req.Header.Set("X-User-Id", "11")
 	req.Header.Set("Authorization", "Bearer secret-dmini")
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
