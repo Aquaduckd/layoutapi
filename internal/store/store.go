@@ -20,7 +20,9 @@ var (
 )
 
 type Actor struct {
-	App string
+	Name  string
+	Tag   string
+	Write map[string]bool
 }
 
 type Filter struct {
@@ -146,7 +148,10 @@ func (s *Store) Create(actor Actor, raw []byte) (string, []byte, error) {
 		return "", nil, err
 	}
 	id := layout.IDFromName(doc.Name)
-	doc.Source = actor.App
+	if err := checkWrite(actor, actor.Tag); err != nil {
+		return "", nil, err
+	}
+	doc.Source = actor.Tag
 	body, err := encodeDoc(doc)
 	if err != nil {
 		return "", nil, err
@@ -294,7 +299,7 @@ func (s *Store) path(id string) string {
 }
 
 func requireApp(actor Actor) error {
-	if strings.TrimSpace(actor.App) == "" {
+	if strings.TrimSpace(actor.Name) == "" || strings.TrimSpace(actor.Tag) == "" {
 		return fmt.Errorf("%w: missing app", ErrForbidden)
 	}
 	return nil
@@ -305,8 +310,8 @@ func checkWrite(actor Actor, source string) error {
 		return err
 	}
 	source = layout.NormalizeSource(source)
-	if actor.App != source {
-		return fmt.Errorf("%w: layout belongs to %s", ErrForbidden, source)
+	if actor.Write[source] {
+		return nil
 	}
-	return nil
+	return fmt.Errorf("%w: layout belongs to %s", ErrForbidden, source)
 }

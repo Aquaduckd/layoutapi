@@ -10,6 +10,22 @@ import (
 	"layoutapi/internal/layout"
 )
 
+func app(name string, extraWrite ...string) Actor {
+	write := map[string]bool{name: true}
+	for _, tag := range extraWrite {
+		write[tag] = true
+	}
+	return Actor{Name: name, Tag: name, Write: write}
+}
+
+func appTag(name, tag string, extraWrite ...string) Actor {
+	write := map[string]bool{tag: true}
+	for _, item := range extraWrite {
+		write[item] = true
+	}
+	return Actor{Name: name, Tag: tag, Write: write}
+}
+
 func sample(name string, user int64) []byte {
 	doc := layout.Doc{
 		Name:  name,
@@ -33,7 +49,7 @@ func TestCreateGetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{App: "dmini"}
+	actor := app("dmini")
 	id, _, err := st.Create(actor, sample("demo-layout", 42))
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +71,7 @@ func TestCreateGetDelete(t *testing.T) {
 	if doc.Source != "dmini" {
 		t.Fatalf("source %q", doc.Source)
 	}
-	if err := st.Delete(id, Actor{App: "web"}); !errors.Is(err, ErrForbidden) {
+	if err := st.Delete(id, app("web")); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
 	}
 	if err := st.Delete(id, actor); err != nil {
@@ -72,7 +88,7 @@ func TestRenameAndList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	actor := Actor{App: "dmini"}
+	actor := app("dmini")
 	if _, _, err := st.Create(actor, sample("alpha-one", 7)); err != nil {
 		t.Fatal(err)
 	}
@@ -126,8 +142,9 @@ func TestAppIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dmini := Actor{App: "dmini"}
-	web := Actor{App: "web"}
+	dmini := appTag("dmini", "cmini")
+	cmini := appTag("cmini", "cmini")
+	web := app("web")
 
 	id, raw, err := st.Create(dmini, sample("app-demo", 42))
 	if err != nil {
@@ -152,7 +169,7 @@ func TestAppIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spoofDoc.Source != "dmini" {
+	if spoofDoc.Source != "cmini" {
 		t.Fatalf("client source ignored, got %q", spoofDoc.Source)
 	}
 	_ = st.Delete("spoof-src", dmini)
@@ -160,7 +177,7 @@ func TestAppIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Source != "dmini" {
+	if doc.Source != "cmini" {
 		t.Fatalf("source %q", doc.Source)
 	}
 
@@ -174,7 +191,7 @@ func TestAppIsolation(t *testing.T) {
 		t.Fatalf("web rename: %v", err)
 	}
 
-	if _, err := st.Replace(id, dmini, sample("app-demo", 42)); err != nil {
+	if _, err := st.Replace(id, cmini, sample("app-demo", 42)); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Delete(id, dmini); err != nil {
@@ -182,7 +199,7 @@ func TestAppIsolation(t *testing.T) {
 	}
 }
 
-func TestLegacyLayoutsBelongToDmini(t *testing.T) {
+func TestLegacyLayoutsBelongToCmini(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "legacy.json"), sample("legacy", 5), 0o644); err != nil {
 		t.Fatal(err)
@@ -191,10 +208,10 @@ func TestLegacyLayoutsBelongToDmini(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := st.Delete("legacy", Actor{App: "web"}); !errors.Is(err, ErrForbidden) {
+	if err := st.Delete("legacy", app("web")); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("web delete legacy: %v", err)
 	}
-	if err := st.Delete("legacy", Actor{App: "dmini"}); err != nil {
+	if err := st.Delete("legacy", appTag("dmini", "cmini")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -219,7 +236,7 @@ func TestOpenCopiedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Source != "dmini" {
+	if doc.Source != "cmini" {
 		t.Fatalf("hours source %q", doc.Source)
 	}
 	if _, err := st.Get("qwerty"); err != nil {

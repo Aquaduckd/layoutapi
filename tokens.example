@@ -1,3 +1,0 @@
-# One write token per application. Delete a line and restart to revoke.
-# Format: name secret
-dmini replace-me

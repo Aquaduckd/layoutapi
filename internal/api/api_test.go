@@ -148,22 +148,32 @@ func TestWritesDisabledWithoutTokens(t *testing.T) {
 	}
 }
 
-func TestParseTokenListAndFile(t *testing.T) {
-	keys := ParseTokenList("dmini:aaa,web:bbb")
-	if len(keys) != 2 || keys[0].Name != "dmini" || keys[1].Secret != "bbb" {
-		t.Fatalf("%+v", keys)
-	}
+func TestLoadAppsFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "tokens")
-	if err := os.WriteFile(path, []byte("# apps\ndmini secret-one\nweb secret two\n"), 0o600); err != nil {
+	path := filepath.Join(dir, "apps.json")
+	raw := []byte(`{
+		"apps": [
+			{"name": "dmini", "secret": "secret-dmini", "tag": "cmini"},
+			{"name": "cmini", "secret": "secret-cmini", "tag": "cmini", "write": ["cmini"]},
+			{"name": "web", "secret": "secret-web"}
+		]
+	}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	fileKeys, err := LoadTokenFile(path)
+	keys, err := LoadAppsFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fileKeys) != 2 || fileKeys[1].Secret != "secret two" {
-		t.Fatalf("%+v", fileKeys)
+	if len(keys) != 3 || keys[0].Tag != "cmini" || keys[2].Name != "web" {
+		t.Fatalf("%+v", keys)
+	}
+	hashed, err := hashKeys(keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hashed[0].write["cmini"] || hashed[2].tag != "web" || !hashed[2].write["web"] {
+		t.Fatalf("%+v", hashed)
 	}
 }
 
@@ -208,8 +218,12 @@ func TestFullList(t *testing.T) {
 	}
 }
 
-func TestAppCannotModifyOtherAppLayout(t *testing.T) {
-	srv := testServer(t, WriteKey{Name: "dmini", Secret: "secret-dmini"}, WriteKey{Name: "web", Secret: "secret-web"})
+func TestSharedTagAndIsolation(t *testing.T) {
+	srv := testServer(t,
+		WriteKey{Name: "dmini", Secret: "secret-dmini", Tag: "cmini"},
+		WriteKey{Name: "cmini", Secret: "secret-cmini", Tag: "cmini"},
+		WriteKey{Name: "web", Secret: "secret-web"},
+	)
 
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
 	req.Header.Set("Authorization", "Bearer secret-dmini")
@@ -232,7 +246,7 @@ func TestAppCannotModifyOtherAppLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if doc["source"] != "dmini" {
+	if doc["source"] != "cmini" {
 		t.Fatalf("source %v", doc["source"])
 	}
 
@@ -248,13 +262,13 @@ func TestAppCannotModifyOtherAppLayout(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)
-	req.Header.Set("Authorization", "Bearer secret-dmini")
+	req.Header.Set("Authorization", "Bearer secret-cmini")
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusNoContent {
-		t.Fatalf("dmini delete %d", res.StatusCode)
+		t.Fatalf("cmini delete %d", res.StatusCode)
 	}
 }

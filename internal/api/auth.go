@@ -1,22 +1,32 @@
 package api
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+
+	"layoutapi/internal/store"
 )
 
 type WriteKey struct {
-	Name   string
-	Secret string
+	Name   string   `json:"name"`
+	Secret string   `json:"secret"`
+	Tag    string   `json:"tag,omitempty"`
+	Write  []string `json:"write,omitempty"`
+}
+
+type AppsFile struct {
+	Apps []WriteKey `json:"apps"`
 }
 
 type hashedKey struct {
-	name string
-	hash [32]byte
+	name  string
+	tag   string
+	hash  [32]byte
+	write map[string]bool
 }
 
 func hashKeys(keys []WriteKey) ([]hashedKey, error) {
@@ -33,91 +43,68 @@ func hashKeys(keys []WriteKey) ([]hashedKey, error) {
 			name = fmt.Sprintf("token-%d", i+1)
 		}
 		if seenName[name] {
-			return nil, fmt.Errorf("duplicate write token name %q", name)
+			return nil, fmt.Errorf("duplicate app name %q", name)
+		}
+		tag := strings.TrimSpace(key.Tag)
+		if tag == "" {
+			tag = name
+		}
+		write := map[string]bool{tag: true}
+		for _, item := range key.Write {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			write[item] = true
 		}
 		sum := sha256.Sum256([]byte(secret))
 		if other, ok := seenHash[sum]; ok {
-			return nil, fmt.Errorf("write tokens %q and %q share the same secret", other, name)
+			return nil, fmt.Errorf("apps %q and %q share the same secret", other, name)
 		}
 		seenName[name] = true
 		seenHash[sum] = name
-		out = append(out, hashedKey{name: name, hash: sum})
+		out = append(out, hashedKey{name: name, tag: tag, hash: sum, write: write})
 	}
 	return out, nil
 }
 
-func ParseTokenList(raw string) []WriteKey {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	var keys []WriteKey
-	for _, part := range strings.Split(raw, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		name, secret, ok := strings.Cut(part, ":")
-		if ok && strings.TrimSpace(name) != "" && strings.TrimSpace(secret) != "" {
-			keys = append(keys, WriteKey{Name: strings.TrimSpace(name), Secret: strings.TrimSpace(secret)})
-			continue
-		}
-		keys = append(keys, WriteKey{Secret: part})
-	}
-	return keys
-}
-
-func LoadTokenFile(path string) ([]WriteKey, error) {
-	f, err := os.Open(path)
+func LoadAppsFile(path string) ([]WriteKey, error) {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-
-	var keys []WriteKey
-	scanner := bufio.NewScanner(f)
-	lineNo := 0
-	for scanner.Scan() {
-		lineNo++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) == 1 {
-			keys = append(keys, WriteKey{Secret: fields[0]})
-			continue
-		}
-		keys = append(keys, WriteKey{Name: fields[0], Secret: strings.Join(fields[1:], " ")})
+	var file AppsFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("%s:%d: %w", path, lineNo, err)
+	if len(file.Apps) == 0 {
+		return nil, fmt.Errorf("%s: no apps defined", path)
 	}
-	return keys, nil
+	return file.Apps, nil
 }
 
-func (s *Server) authorizeWrite(header string) (string, error) {
+func (s *Server) authorizeWrite(header string) (store.Actor, error) {
 	if len(s.keys) == 0 {
-		return "", errWritesDisabled
+		return store.Actor{}, errWritesDisabled
 	}
 	got := bearerToken(header)
 	if got == "" {
-		return "", errUnauthorized
+		return store.Actor{}, errUnauthorized
 	}
 	sum := sha256.Sum256([]byte(got))
-	matched := ""
+	var actor store.Actor
 	ok := 0
 	for _, key := range s.keys {
 		match := subtle.ConstantTimeCompare(sum[:], key.hash[:])
 		ok |= match
 		if match == 1 {
-			matched = key.name
+			actor = store.Actor{Name: key.name, Tag: key.tag, Write: key.write}
 		}
 	}
 	if ok != 1 {
-		return "", errUnauthorized
+		return store.Actor{}, errUnauthorized
 	}
-	return matched, nil
+	return actor, nil
 }
 
 func bearerToken(header string) string {

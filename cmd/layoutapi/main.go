@@ -24,9 +24,7 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("layoutapi", flag.ContinueOnError)
 	addr := fs.String("addr", ":8080", "listen address")
 	dir := fs.String("dir", defaultDir(), "directory of layout JSON files")
-	token := fs.String("token", os.Getenv("LAYOUTAPI_TOKEN"), "single write token")
-	tokens := fs.String("tokens", os.Getenv("LAYOUTAPI_TOKENS"), "comma-separated write tokens, as name:secret or secret")
-	tokenFile := fs.String("token-file", envOr("LAYOUTAPI_TOKEN_FILE", "tokens.txt"), "file of write tokens, one `name secret` per line")
+	apps := fs.String("apps", envOr("LAYOUTAPI_APPS", "apps.json"), "JSON file of apps, secrets, tags, and write access")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -37,7 +35,7 @@ func run(args []string) error {
 	}
 	log.Printf("loaded %d layouts from %s", st.Count(), st.Dir())
 
-	keys, err := collectWriteKeys(*token, *tokens, *tokenFile)
+	keys, err := loadApps(*apps)
 	if err != nil {
 		return err
 	}
@@ -46,32 +44,27 @@ func run(args []string) error {
 		return err
 	}
 	if srv.WriteKeyCount() == 0 {
-		log.Printf("no write tokens configured; GET is public, writes return 503")
+		log.Printf("no apps configured; GET is public, writes return 503")
 	} else {
-		log.Printf("write tokens loaded: %d", srv.WriteKeyCount())
+		log.Printf("apps loaded: %d", srv.WriteKeyCount())
 	}
 
 	log.Printf("listening on %s", *addr)
 	return http.ListenAndServe(*addr, srv.Handler())
 }
 
-func collectWriteKeys(token, tokens, tokenFile string) ([]api.WriteKey, error) {
-	var keys []api.WriteKey
-	if strings.TrimSpace(token) != "" {
-		keys = append(keys, api.WriteKey{Name: "default", Secret: strings.TrimSpace(token)})
+func loadApps(path string) ([]api.WriteKey, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
 	}
-	keys = append(keys, api.ParseTokenList(tokens)...)
-	if strings.TrimSpace(tokenFile) == "" {
-		return keys, nil
-	}
-	fileKeys, err := api.LoadTokenFile(tokenFile)
+	keys, err := api.LoadAppsFile(path)
 	if err != nil {
-		if os.IsNotExist(err) && tokenFile == "tokens.txt" && os.Getenv("LAYOUTAPI_TOKEN_FILE") == "" {
-			return keys, nil
+		if os.IsNotExist(err) && path == "apps.json" && os.Getenv("LAYOUTAPI_APPS") == "" {
+			return nil, nil
 		}
-		return nil, fmt.Errorf("token file: %w", err)
+		return nil, fmt.Errorf("apps file: %w", err)
 	}
-	return append(keys, fileKeys...), nil
+	return keys, nil
 }
 
 func envOr(key, fallback string) string {

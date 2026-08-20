@@ -3,4 +3,5 @@
 *.exe
 .DS_Store
 tokens.txt
+apps.json
 .env

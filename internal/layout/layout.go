@@ -10,7 +10,7 @@ import (
 
 const (
 	minNameLen    = 3
-	DefaultSource = "dmini"
+	DefaultSource = "cmini"
 )
 
 var allowedBoards = map[string]bool{
@@ -27,7 +27,7 @@ var allowedFingers = map[string]bool{
 }
 
 // Doc is the cmini layout JSON shape. Optional "free" is preserved on encode.
-// Source is the write-token name that created the layout (dmini, web, …).
+// Source is the catalog tag the creating app stamped (cmini, web, …).
 type Doc struct {
 	Name   string              `json:"name"`
 	User   int64               `json:"user"`

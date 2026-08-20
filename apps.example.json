@@ -1,0 +1,19 @@
+{
+  "apps": [
+    {
+      "name": "dmini",
+      "secret": "replace-me",
+      "tag": "cmini"
+    },
+    {
+      "name": "cmini",
+      "secret": "replace-me-too",
+      "tag": "cmini"
+    },
+    {
+      "name": "web",
+      "secret": "replace-me-as-well",
+      "tag": "web"
+    }
+  ]
+}

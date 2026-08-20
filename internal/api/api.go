@@ -193,7 +193,7 @@ func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeActor(w http.ResponseWriter, r *http.Request) (store.Actor, bool) {
-	app, err := s.authorizeWrite(r.Header.Get("Authorization"))
+	actor, err := s.authorizeWrite(r.Header.Get("Authorization"))
 	if err != nil {
 		status := http.StatusUnauthorized
 		if errors.Is(err, errWritesDisabled) {
@@ -203,7 +203,7 @@ func (s *Server) writeActor(w http.ResponseWriter, r *http.Request) (store.Actor
 		writeError(w, status, err.Error())
 		return store.Actor{}, false
 	}
-	return store.Actor{App: app}, true
+	return actor, true
 }
 
 func readBody(r *http.Request) ([]byte, error) {

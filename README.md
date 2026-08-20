@@ -1,6 +1,6 @@
 # layoutapi
 
-Public catalog API. **GET is unauthenticated. Writes require a bearer token.**
+Public catalog API. **GET is unauthenticated. Writes require an app bearer token.**
 
 `layouts/` is a snapshot copied from cmini.
 
@@ -11,31 +11,44 @@ cd layoutapi
 go run ./cmd/layoutapi
 ```
 
-Loads `tokens.txt` from the working directory if present.
+Loads `apps.json` from the working directory if present.
 
 Listens on `:8080`. Override with `-addr`, `-dir`, or `LAYOUTAPI_DIR`.
 
-## Write tokens
+## Apps
 
-Each application gets its own named token. Remove that line and restart to revoke it.
+Each client is an app with its own secret. A layout is stamped with a **tag** (`source` in the JSON), which is not necessarily the app name. Several apps can write the same tag.
 
-`tokens.txt` (not committed). dmini reads the same secret from `cmini/layoutapi_token.txt` (or `LAYOUTAPI_TOKEN`).
+`apps.json` (not committed):
 
+```json
+{
+  "apps": [
+    {
+      "name": "dmini",
+      "secret": "replace-with-a-long-random-string",
+      "tag": "cmini"
+    },
+    {
+      "name": "cmini",
+      "secret": "another-long-random-string",
+      "tag": "cmini"
+    },
+    {
+      "name": "web",
+      "secret": "a-third-long-random-string",
+      "tag": "web"
+    }
+  ]
+}
 ```
-# name  secret
-dmini   replace-with-a-long-random-string
-web     another-long-random-string
-```
 
-Or environment:
+- `name` — app id, for revoke and logs
+- `secret` — bearer token
+- `tag` — stamped on create; defaults to `name`
+- `write` — tags this app may mutate; defaults to `[tag]`
 
-```
-# several named tokens
-LAYOUTAPI_TOKENS=dmini:secret-one,web:secret-two
-
-# one token (named "default")
-LAYOUTAPI_TOKEN=secret-one
-```
+dmini reads its secret from `cmini/layoutapi_token.txt` (or `LAYOUTAPI_TOKEN`).
 
 Writes send:
 
@@ -43,9 +56,9 @@ Writes send:
 Authorization: Bearer <secret>
 ```
 
-Each layout is stamped with the token name that created it (`source`). Later writes must use that same app token. Discord user/admin checks belong to the client (dmini). The `user` field is stored as metadata. Existing files with no `source` are treated as `dmini`. Names are still globally unique.
+Discord user/admin checks belong to the client. The `user` field is metadata. Existing files with no `source` are treated as `cmini`. Names are globally unique. GET stays public.
 
-If no tokens are configured, writes return 503.
+If no apps are configured, writes return 503.
 
 ## API
 
@@ -54,7 +67,7 @@ If no tokens are configured, writes return 503.
 | `GET` | `/health` | public | count of loaded layouts |
 | `GET` | `/v1/layouts` | public | `q`, `board`, `user`, `limit`, `offset`, `full=1` |
 | `GET` | `/v1/layouts/{name}` | public | full layout JSON |
-| `POST` | `/v1/layouts` | bearer | create; 409 if the name exists |
-| `PUT` | `/v1/layouts/{name}` | bearer | replace; same app only |
-| `DELETE` | `/v1/layouts/{name}` | bearer | same app only |
-| `POST` | `/v1/layouts/{name}/rename` | bearer | body `{"name":"new-name"}`; same app only |
+| `POST` | `/v1/layouts` | bearer | create; stamps `tag`; 409 if the name exists |
+| `PUT` | `/v1/layouts/{name}` | bearer | replace; app must be allowed to write that tag |
+| `DELETE` | `/v1/layouts/{name}` | bearer | same |
+| `POST` | `/v1/layouts/{name}/rename` | bearer | body `{"name":"new-name"}` |
