@@ -195,7 +195,8 @@ func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeActor(w http.ResponseWriter, r *http.Request) (store.Actor, bool) {
-	if err := s.authorizeWrite(r.Header.Get("Authorization")); err != nil {
+	app, err := s.authorizeWrite(r.Header.Get("Authorization"))
+	if err != nil {
 		status := http.StatusUnauthorized
 		if errors.Is(err, errWritesDisabled) {
 			status = http.StatusServiceUnavailable
@@ -209,6 +210,7 @@ func (s *Server) writeActor(w http.ResponseWriter, r *http.Request) (store.Actor
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return store.Actor{}, false
 	}
+	actor.App = app
 	return actor, true
 }
 

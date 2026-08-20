@@ -8,7 +8,10 @@ import (
 	"unicode/utf8"
 )
 
-const minNameLen = 3
+const (
+	minNameLen    = 3
+	DefaultSource = "dmini"
+)
 
 var allowedBoards = map[string]bool{
 	"ortho":   true,
@@ -24,12 +27,14 @@ var allowedFingers = map[string]bool{
 }
 
 // Doc is the cmini layout JSON shape. Optional "free" is preserved on encode.
+// Source is the write-token name that created the layout (dmini, web, …).
 type Doc struct {
-	Name  string              `json:"name"`
-	User  int64               `json:"user"`
-	Board string              `json:"board"`
-	Keys  map[string]Position `json:"keys"`
-	Free  []any               `json:"free,omitempty"`
+	Name   string              `json:"name"`
+	User   int64               `json:"user"`
+	Board  string              `json:"board"`
+	Keys   map[string]Position `json:"keys"`
+	Free   []any               `json:"free,omitempty"`
+	Source string              `json:"source,omitempty"`
 }
 
 type Position struct {
@@ -43,6 +48,7 @@ type Summary struct {
 	Name     string `json:"name"`
 	User     int64  `json:"user"`
 	Board    string `json:"board"`
+	Source   string `json:"source"`
 	KeyCount int    `json:"key_count"`
 }
 
@@ -58,12 +64,21 @@ func Parse(raw []byte) (Doc, error) {
 	return doc, nil
 }
 
+func NormalizeSource(source string) string {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return DefaultSource
+	}
+	return source
+}
+
 func (d Doc) Summary(id string) Summary {
 	return Summary{
 		ID:       id,
 		Name:     d.Name,
 		User:     d.User,
 		Board:    d.Board,
+		Source:   NormalizeSource(d.Source),
 		KeyCount: len(d.Keys),
 	}
 }

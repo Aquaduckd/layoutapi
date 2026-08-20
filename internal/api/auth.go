@@ -96,23 +96,28 @@ func LoadTokenFile(path string) ([]WriteKey, error) {
 	return keys, nil
 }
 
-func (s *Server) authorizeWrite(header string) error {
+func (s *Server) authorizeWrite(header string) (string, error) {
 	if len(s.keys) == 0 {
-		return errWritesDisabled
+		return "", errWritesDisabled
 	}
 	got := bearerToken(header)
 	if got == "" {
-		return errUnauthorized
+		return "", errUnauthorized
 	}
 	sum := sha256.Sum256([]byte(got))
+	matched := ""
 	ok := 0
 	for _, key := range s.keys {
-		ok |= subtle.ConstantTimeCompare(sum[:], key.hash[:])
+		match := subtle.ConstantTimeCompare(sum[:], key.hash[:])
+		ok |= match
+		if match == 1 {
+			matched = key.name
+		}
 	}
 	if ok != 1 {
-		return errUnauthorized
+		return "", errUnauthorized
 	}
-	return nil
+	return matched, nil
 }
 
 func bearerToken(header string) string {

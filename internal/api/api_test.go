@@ -213,3 +213,58 @@ func TestFullList(t *testing.T) {
 		t.Fatalf("%+v", full)
 	}
 }
+
+func TestAppCannotModifyOtherAppLayout(t *testing.T) {
+	srv := testServer(t, WriteKey{Name: "dmini", Secret: "secret-dmini"}, WriteKey{Name: "web", Secret: "secret-web"})
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/v1/layouts", bytes.NewReader(sampleBody()))
+	req.Header.Set("X-User-Id", "11")
+	req.Header.Set("Authorization", "Bearer secret-dmini")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(res.Body)
+		t.Fatalf("create %d %s", res.StatusCode, b)
+	}
+	res.Body.Close()
+
+	res, err = http.Get(srv.URL + "/v1/layouts/http-demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if doc["source"] != "dmini" {
+		t.Fatalf("source %v", doc["source"])
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)
+	req.Header.Set("X-User-Id", "11")
+	req.Header.Set("X-Admin", "true")
+	req.Header.Set("Authorization", "Bearer secret-web")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("web delete %d", res.StatusCode)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)
+	req.Header.Set("X-User-Id", "11")
+	req.Header.Set("Authorization", "Bearer secret-dmini")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("dmini delete %d", res.StatusCode)
+	}
+}

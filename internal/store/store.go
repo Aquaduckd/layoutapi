@@ -21,6 +21,7 @@ var (
 
 type Actor struct {
 	User  int64
+	App   string
 	Admin bool
 }
 
@@ -36,6 +37,7 @@ type record struct {
 	summary layout.Summary
 	body    []byte
 	user    int64
+	source  string
 }
 
 type Store struct {
@@ -73,6 +75,7 @@ func Open(dir string) (*Store, error) {
 			summary: doc.Summary(id),
 			body:    raw,
 			user:    doc.User,
+			source:  layout.NormalizeSource(doc.Source),
 		}
 	}
 	return s, nil
@@ -137,13 +140,21 @@ func (s *Store) List(f Filter) ([]layout.Summary, int) {
 }
 
 func (s *Store) Create(actor Actor, raw []byte) (string, []byte, error) {
-	doc, body, err := parseAndValidate(raw, "", true)
+	doc, err := parseAndValidate(raw, "", true)
 	if err != nil {
+		return "", nil, err
+	}
+	if err := requireApp(actor); err != nil {
 		return "", nil, err
 	}
 	id := layout.IDFromName(doc.Name)
 	if !actor.Admin && actor.User != doc.User {
 		return "", nil, fmt.Errorf("%w: body user does not match caller", ErrForbidden)
+	}
+	doc.Source = actor.App
+	body, err := encodeDoc(doc)
+	if err != nil {
+		return "", nil, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,7 +169,7 @@ func (s *Store) Create(actor Actor, raw []byte) (string, []byte, error) {
 
 func (s *Store) Replace(id string, actor Actor, raw []byte) ([]byte, error) {
 	id = layout.IDFromName(id)
-	doc, body, err := parseAndValidate(raw, id, true)
+	doc, err := parseAndValidate(raw, id, true)
 	if err != nil {
 		return nil, err
 	}
@@ -168,11 +179,16 @@ func (s *Store) Replace(id string, actor Actor, raw []byte) ([]byte, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	if err := checkOwner(actor, rec.user); err != nil {
+	if err := checkWrite(actor, rec.user, rec.source); err != nil {
 		return nil, err
 	}
 	if !actor.Admin && actor.User != doc.User {
 		return nil, fmt.Errorf("%w: cannot change owner", ErrForbidden)
+	}
+	doc.Source = rec.source
+	body, err := encodeDoc(doc)
+	if err != nil {
+		return nil, err
 	}
 	if err := s.writeLocked(id, doc, body); err != nil {
 		return nil, err
@@ -188,7 +204,7 @@ func (s *Store) Delete(id string, actor Actor) error {
 	if !ok {
 		return ErrNotFound
 	}
-	if err := checkOwner(actor, rec.user); err != nil {
+	if err := checkWrite(actor, rec.user, rec.source); err != nil {
 		return err
 	}
 	if err := os.Remove(s.path(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -210,7 +226,7 @@ func (s *Store) Rename(id, newName string, actor Actor) (string, []byte, error) 
 	if !ok {
 		return "", nil, ErrNotFound
 	}
-	if err := checkOwner(actor, rec.user); err != nil {
+	if err := checkWrite(actor, rec.user, rec.source); err != nil {
 		return "", nil, err
 	}
 	if newID != id {
@@ -223,7 +239,8 @@ func (s *Store) Rename(id, newName string, actor Actor) (string, []byte, error) 
 		return "", nil, err
 	}
 	doc.Name = newName
-	body, err := layout.Encode(doc)
+	doc.Source = rec.source
+	body, err := encodeDoc(doc)
 	if err != nil {
 		return "", nil, err
 	}
@@ -239,22 +256,26 @@ func (s *Store) Rename(id, newName string, actor Actor) (string, []byte, error) 
 	return newID, body, nil
 }
 
-func parseAndValidate(raw []byte, id string, strictName bool) (layout.Doc, []byte, error) {
+func parseAndValidate(raw []byte, id string, strictName bool) (layout.Doc, error) {
 	doc, err := layout.Parse(raw)
 	if err != nil {
-		return layout.Doc{}, nil, fmt.Errorf("%w: %s", ErrValidation, err)
+		return layout.Doc{}, fmt.Errorf("%w: %s", ErrValidation, err)
 	}
 	if id == "" {
 		id = layout.IDFromName(doc.Name)
 	}
 	if err := doc.Validate(id, strictName); err != nil {
-		return layout.Doc{}, nil, fmt.Errorf("%w: %s", ErrValidation, err)
+		return layout.Doc{}, fmt.Errorf("%w: %s", ErrValidation, err)
 	}
+	return doc, nil
+}
+
+func encodeDoc(doc layout.Doc) ([]byte, error) {
 	body, err := layout.Encode(doc)
 	if err != nil {
-		return layout.Doc{}, nil, err
+		return nil, err
 	}
-	return doc, body, nil
+	return body, nil
 }
 
 func (s *Store) writeLocked(id string, doc layout.Doc, body []byte) error {
@@ -267,7 +288,12 @@ func (s *Store) writeLocked(id string, doc layout.Doc, body []byte) error {
 		_ = os.Remove(tmp)
 		return err
 	}
-	s.byID[id] = record{summary: doc.Summary(id), body: body, user: doc.User}
+	s.byID[id] = record{
+		summary: doc.Summary(id),
+		body:    body,
+		user:    doc.User,
+		source:  layout.NormalizeSource(doc.Source),
+	}
 	return nil
 }
 
@@ -275,7 +301,21 @@ func (s *Store) path(id string) string {
 	return filepath.Join(s.dir, id+".json")
 }
 
-func checkOwner(actor Actor, owner int64) error {
+func requireApp(actor Actor) error {
+	if strings.TrimSpace(actor.App) == "" {
+		return fmt.Errorf("%w: missing app", ErrForbidden)
+	}
+	return nil
+}
+
+func checkWrite(actor Actor, owner int64, source string) error {
+	if err := requireApp(actor); err != nil {
+		return err
+	}
+	source = layout.NormalizeSource(source)
+	if actor.App != source {
+		return fmt.Errorf("%w: layout belongs to %s", ErrForbidden, source)
+	}
 	if actor.Admin || actor.User == owner {
 		return nil
 	}

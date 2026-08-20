@@ -2,6 +2,15 @@ package layout
 
 import "testing"
 
+func TestNormalizeSource(t *testing.T) {
+	if got := NormalizeSource(""); got != DefaultSource {
+		t.Fatalf("got %q", got)
+	}
+	if got := NormalizeSource("web"); got != "web" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestIDFromName(t *testing.T) {
 	if got := IDFromName("QWERTY"); got != "qwerty" {
 		t.Fatalf("got %q", got)
