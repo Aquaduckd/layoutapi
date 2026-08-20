@@ -4,39 +4,45 @@ The catalog to copy is the **running bot’s** `layouts/` directory on the serve
 
 This assumes both processes end up on the same machine. If the API is elsewhere, copy `layouts/` and use `https://…` for `LAYOUTAPI_URL`.
 
-Paths below are examples. Substitute the real checkout locations.
+Set the two checkouts once, then use those variables in every command:
+
+```sh
+CMINI=$HOME/cmini
+LAYOUTAPI=$HOME/layoutapi
+```
+
+Change the assignments if the bot or API lives somewhere else (`pwd` in each repo).
 
 ## 1. Stop the old bot
 
-Stop the running `main.py` process (`Ctrl-C`, `kill`, or `sudo systemctl stop cmini`). Leave it stopped until step 7 so `layouts/` cannot change while you copy it.
+Stop the running `main.py` process (`Ctrl-C`, `kill`, or `sudo systemctl stop cmini`). Leave it stopped until step 7 so `$CMINI/layouts` cannot change while you copy it.
 
 ## 2. Copy the catalog
 
-From the old cmini checkout:
-
 ```sh
-ls layouts | wc -l
-cp -a layouts /tmp/cmini-backup/layouts
+mkdir -p /tmp/cmini-backup
+ls "$CMINI/layouts" | wc -l
+cp -a "$CMINI/layouts" /tmp/cmini-backup/layouts
 ```
 
-Then install this `layoutapi` tree on the host (clone or copy). Replace its `layouts/` with the live files:
+Install this `layoutapi` tree at `$LAYOUTAPI` if it is not there yet (clone or copy). Replace its `layouts/` with the live files:
 
 ```sh
-rm -rf /path/to/layoutapi/layouts
-cp -a /path/to/cmini/layouts /path/to/layoutapi/layouts
-ls /path/to/layoutapi/layouts | wc -l
+rm -rf "$LAYOUTAPI/layouts"
+cp -a "$CMINI/layouts" "$LAYOUTAPI/layouts"
+ls "$LAYOUTAPI/layouts" | wc -l
 ```
 
 The two counts should match. Files with no `tag` / `blame` are treated as `cmini`; do not rewrite them first.
 
 ## 3. Create `apps.json`
 
-In `/path/to/layoutapi` (this file is gitignored):
+`$LAYOUTAPI/apps.json` is gitignored.
 
 ```sh
 SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 umask 077
-cat > apps.json <<EOF
+cat > "$LAYOUTAPI/apps.json" <<EOF
 {
   "apps": [
     {
@@ -47,17 +53,18 @@ cat > apps.json <<EOF
   ]
 }
 EOF
-printf '%s\n' "$SECRET" > /path/to/cmini/layoutapi_token.txt
-chmod 600 apps.json /path/to/cmini/layoutapi_token.txt
+printf '%s\n' "$SECRET" > "$CMINI/layoutapi_token.txt"
+chmod 600 "$LAYOUTAPI/apps.json" "$CMINI/layoutapi_token.txt"
 ```
 
-`apps.json` `secret` and `cmini/layoutapi_token.txt` must be the identical string. Do not commit either file.
+The `secret` in `apps.json` and the contents of `$CMINI/layoutapi_token.txt` must be the identical string. Do not commit either file.
 
 ## 4. Start layoutapi
 
-Needs Go. From `/path/to/layoutapi`:
+Needs Go.
 
 ```sh
+cd "$LAYOUTAPI"
 go run ./cmd/layoutapi
 ```
 
@@ -76,24 +83,22 @@ If anything other than this machine will **write**, put TLS in front (Caddy, ngi
 
 ## 5. Update cmini’s source
 
-With the bot still stopped, replace the old file-based checkout with the API-backed tree (`util/memory.py` talks HTTP, there is no write path to a local `layouts/` folder).
+With the bot still stopped, replace the old file-based tree with the API-backed tree (`util/memory.py` talks HTTP, there is no write path to a local `layouts/` folder).
 
-Keep `token.txt`, `admins.py`, and `layoutapi_token.txt` from step 3. Those are gitignored and will not come from git.
+Keep `$CMINI/token.txt`, `$CMINI/admins.py`, and `$CMINI/layoutapi_token.txt`. Those are gitignored and will not come from git.
 
 ```sh
-cd /path/to/cmini
+cd "$CMINI"
 git fetch
 git checkout <api-backed-branch>
-# or: rsync/copy the new src over this directory, excluding token.txt admins.py layoutapi_token.txt
 ```
 
 Do this **after** step 2. The live `layouts/` must be copied out before the old tree is overwritten.
 
 ## 6. Install and point the bot at the API
 
-From `/path/to/cmini`:
-
 ```sh
+cd "$CMINI"
 poetry env use python3.10
 poetry install
 ```
@@ -104,13 +109,14 @@ If the bot and API are on the same host, the default URL is already `http://127.
 export LAYOUTAPI_URL=https://your-layoutapi-host
 ```
 
-`layoutapi_token.txt` must be in this directory (the bot’s cwd when it starts). Discord privileged intents still required: **Message Content** and **Server Members**.
+The bot must be started with cwd `$CMINI` so it finds `layoutapi_token.txt`. Discord privileged intents still required: **Message Content** and **Server Members**.
 
 ## 7. Start the new bot
 
-The old process is still stopped from step 1. From `/path/to/cmini`:
+The old process is still stopped from step 1.
 
 ```sh
+cd "$CMINI"
 poetry run python3 main.py
 ```
 
@@ -121,10 +127,10 @@ Do not start the old file-based `main.py` as well. One Discord token, one proces
 In Discord, add a throwaway layout with `!cmini add`, then:
 
 ```sh
-ls /path/to/layoutapi/layouts | grep -i throwaway-name
-ls /path/to/cmini/layouts | grep -i throwaway-name
+ls "$LAYOUTAPI/layouts" | grep -i throwaway-name
+ls "$CMINI/layouts" | grep -i throwaway-name
 ```
 
-The new file must appear only under `layoutapi/layouts/`. Remove it with `!cmini remove` and confirm that file is gone from `layoutapi/layouts/`.
+The new file must appear only under `$LAYOUTAPI/layouts`. Remove it with `!cmini remove` and confirm that file is gone from `$LAYOUTAPI/layouts`.
 
-Corpora, cache, and Discord `token.txt` stay with the bot. After this, the old `cmini/layouts/` directory is leftover; nothing should write there.
+Corpora, cache, and Discord `token.txt` stay with the bot. After this, `$CMINI/layouts` is leftover; nothing should write there.
