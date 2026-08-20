@@ -8,7 +8,7 @@ Paths below are examples. Substitute the real checkout locations.
 
 ## 1. Stop the old bot
 
-Stop the running `main.py` process (`Ctrl-C`, `kill`, or `sudo systemctl stop cmini`). Leave it stopped until step 6 so `layouts/` cannot change while you copy it.
+Stop the running `main.py` process (`Ctrl-C`, `kill`, or `sudo systemctl stop cmini`). Leave it stopped until step 7 so `layouts/` cannot change while you copy it.
 
 ## 2. Copy the catalog
 
@@ -72,11 +72,24 @@ curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/v1/layouts/hours
 
 Expect `{"ok":true,"count":…}` and `200`.
 
-If anything other than this machine will **write**, put TLS in front (Caddy, nginx, Cloudflare) and use `https://…` in the next step. GET can stay public. The Go process itself can keep serving HTTP on localhost behind the proxy.
+If anything other than this machine will **write**, put TLS in front (Caddy, nginx, Cloudflare) and use `https://…` in step 6. GET can stay public. The Go process itself can keep serving HTTP on localhost behind the proxy.
 
-## 5. Configure the API-backed bot
+## 5. Update cmini’s source
 
-The Discord bot must be the version that talks to layoutapi (`util/memory.py` uses HTTP, not a local `layouts/` folder). Deploy that code into `/path/to/cmini`, keeping the same `token.txt` if you want the same bot user.
+With the bot still stopped, replace the old file-based checkout with the API-backed tree (`util/memory.py` talks HTTP, there is no write path to a local `layouts/` folder).
+
+Keep `token.txt`, `admins.py`, and `layoutapi_token.txt` from step 3. Those are gitignored and will not come from git.
+
+```sh
+cd /path/to/cmini
+git fetch
+git checkout <api-backed-branch>
+# or: rsync/copy the new src over this directory, excluding token.txt admins.py layoutapi_token.txt
+```
+
+Do this **after** step 2. The live `layouts/` must be copied out before the old tree is overwritten.
+
+## 6. Install and point the bot at the API
 
 From `/path/to/cmini`:
 
@@ -91,9 +104,9 @@ If the bot and API are on the same host, the default URL is already `http://127.
 export LAYOUTAPI_URL=https://your-layoutapi-host
 ```
 
-`layoutapi_token.txt` from step 3 must be in this directory (the bot’s cwd when it starts). Discord privileged intents still required: **Message Content** and **Server Members**.
+`layoutapi_token.txt` must be in this directory (the bot’s cwd when it starts). Discord privileged intents still required: **Message Content** and **Server Members**.
 
-## 6. Start the new bot
+## 7. Start the new bot
 
 The old process is still stopped from step 1. From `/path/to/cmini`:
 
@@ -103,7 +116,7 @@ poetry run python3 main.py
 
 Do not start the old file-based `main.py` as well. One Discord token, one process.
 
-## 7. Verify
+## 8. Verify
 
 In Discord, add a throwaway layout with `!cmini add`, then:
 
