@@ -4,6 +4,8 @@ Public catalog API. **GET is unauthenticated. Writes require an app bearer token
 
 `layouts/` is a snapshot copied from cmini.
 
+To move a live file-based cmini onto this API, see [MIGRATION.md](MIGRATION.md).
+
 ## Run
 
 ```
@@ -48,7 +50,7 @@ Each client is an app with its own secret. Layouts have a **tag** (who may write
 - `tag` — stamped on create; defaults to `name`
 - `write` — tags this app may mutate; defaults to `[tag]`
 
-dmini reads its secret from `cmini/layoutapi_token.txt` (or `LAYOUTAPI_TOKEN`).
+dmini / the Discord bot reads its secret from `cmini/layoutapi_token.txt` (or `LAYOUTAPI_TOKEN`).
 
 Writes send:
 
@@ -71,3 +73,4 @@ If no apps are configured, writes return 503.
 | `PUT` | `/v1/layouts/{name}` | bearer | replace; app must be allowed to write that tag |
 | `DELETE` | `/v1/layouts/{name}` | bearer | same |
 | `POST` | `/v1/layouts/{name}/rename` | bearer | body `{"name":"new-name"}` |
+
