@@ -8,27 +8,7 @@ Paths below are examples. Substitute the real checkout locations.
 
 ## 1. Stop the old bot
 
-That is what “pause add/remove” means. With the process down, Discord commands do nothing and `layouts/` cannot change.
-
-If it is a systemd unit:
-
-```sh
-sudo systemctl stop cmini
-```
-
-Otherwise find and kill it:
-
-```sh
-ps aux | grep -E 'python3 main.py|poetry run python'
-```
-
-Stop that process (`Ctrl-C` in its terminal, or `kill` its PID). Confirm it is gone:
-
-```sh
-ps aux | grep '[m]ain.py'
-```
-
-Leave it stopped until step 6.
+Stop the running `main.py` process (`Ctrl-C`, `kill`, or `sudo systemctl stop cmini`). Leave it stopped until step 6 so `layouts/` cannot change while you copy it.
 
 ## 2. Copy the catalog
 
@@ -36,7 +16,6 @@ From the old cmini checkout:
 
 ```sh
 ls layouts | wc -l
-cp -a token.txt admins.py /tmp/cmini-backup/
 cp -a layouts /tmp/cmini-backup/layouts
 ```
 
