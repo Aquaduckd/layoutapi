@@ -2,11 +2,18 @@ package layout
 
 import "testing"
 
-func TestNormalizeSource(t *testing.T) {
-	if got := NormalizeSource(""); got != DefaultSource {
+func TestNormalizeTag(t *testing.T) {
+	if got := NormalizeTag(""); got != DefaultTag {
 		t.Fatalf("got %q", got)
 	}
-	if got := NormalizeSource("web"); got != "web" {
+	if got := NormalizeTag("web"); got != "web" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestCatalogTagFallsBackToSource(t *testing.T) {
+	doc := Doc{Source: "cmini"}
+	if got := doc.CatalogTag(); got != "cmini" {
 		t.Fatalf("got %q", got)
 	}
 }

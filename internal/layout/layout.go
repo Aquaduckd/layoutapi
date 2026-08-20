@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	minNameLen    = 3
-	DefaultSource = "cmini"
+	minNameLen = 3
+	DefaultTag = "cmini"
 )
 
 var allowedBoards = map[string]bool{
@@ -27,11 +27,14 @@ var allowedFingers = map[string]bool{
 }
 
 // Doc is the cmini layout JSON shape. Optional "free" is preserved on encode.
-// Source is the catalog tag the creating app stamped (cmini, web, …).
+// Tag is the catalog that may write this layout. Blame is the app that last wrote it.
+// Source is accepted only when reading old files.
 type Doc struct {
 	Name   string              `json:"name"`
 	User   int64               `json:"user"`
 	Board  string              `json:"board"`
+	Tag    string              `json:"tag,omitempty"`
+	Blame  string              `json:"blame,omitempty"`
 	Keys   map[string]Position `json:"keys"`
 	Free   []any               `json:"free,omitempty"`
 	Source string              `json:"source,omitempty"`
@@ -48,7 +51,8 @@ type Summary struct {
 	Name     string `json:"name"`
 	User     int64  `json:"user"`
 	Board    string `json:"board"`
-	Source   string `json:"source"`
+	Tag      string `json:"tag"`
+	Blame    string `json:"blame,omitempty"`
 	KeyCount int    `json:"key_count"`
 }
 
@@ -64,12 +68,22 @@ func Parse(raw []byte) (Doc, error) {
 	return doc, nil
 }
 
-func NormalizeSource(source string) string {
-	source = strings.TrimSpace(source)
-	if source == "" {
-		return DefaultSource
+func NormalizeTag(tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return DefaultTag
 	}
-	return source
+	return tag
+}
+
+func (d Doc) CatalogTag() string {
+	if tag := strings.TrimSpace(d.Tag); tag != "" {
+		return tag
+	}
+	if tag := strings.TrimSpace(d.Source); tag != "" {
+		return tag
+	}
+	return DefaultTag
 }
 
 func (d Doc) Summary(id string) Summary {
@@ -78,7 +92,8 @@ func (d Doc) Summary(id string) Summary {
 		Name:     d.Name,
 		User:     d.User,
 		Board:    d.Board,
-		Source:   NormalizeSource(d.Source),
+		Tag:      d.CatalogTag(),
+		Blame:    strings.TrimSpace(d.Blame),
 		KeyCount: len(d.Keys),
 	}
 }
@@ -149,6 +164,8 @@ func nameRuneOK(r rune) bool {
 }
 
 func Encode(doc Doc) ([]byte, error) {
+	doc.Tag = doc.CatalogTag()
+	doc.Source = ""
 	out, err := json.MarshalIndent(doc, "", "    ")
 	if err != nil {
 		return nil, err

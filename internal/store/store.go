@@ -37,7 +37,7 @@ type record struct {
 	summary layout.Summary
 	body    []byte
 	user    int64
-	source  string
+	tag     string
 }
 
 type Store struct {
@@ -75,7 +75,7 @@ func Open(dir string) (*Store, error) {
 			summary: doc.Summary(id),
 			body:    raw,
 			user:    doc.User,
-			source:  layout.NormalizeSource(doc.Source),
+			tag:     doc.CatalogTag(),
 		}
 	}
 	return s, nil
@@ -151,7 +151,9 @@ func (s *Store) Create(actor Actor, raw []byte) (string, []byte, error) {
 	if err := checkWrite(actor, actor.Tag); err != nil {
 		return "", nil, err
 	}
-	doc.Source = actor.Tag
+	doc.Tag = actor.Tag
+	doc.Blame = actor.Name
+	doc.Source = ""
 	body, err := encodeDoc(doc)
 	if err != nil {
 		return "", nil, err
@@ -179,10 +181,12 @@ func (s *Store) Replace(id string, actor Actor, raw []byte) ([]byte, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	if err := checkWrite(actor, rec.source); err != nil {
+	if err := checkWrite(actor, rec.tag); err != nil {
 		return nil, err
 	}
-	doc.Source = rec.source
+	doc.Tag = rec.tag
+	doc.Blame = actor.Name
+	doc.Source = ""
 	body, err := encodeDoc(doc)
 	if err != nil {
 		return nil, err
@@ -201,7 +205,7 @@ func (s *Store) Delete(id string, actor Actor) error {
 	if !ok {
 		return ErrNotFound
 	}
-	if err := checkWrite(actor, rec.source); err != nil {
+	if err := checkWrite(actor, rec.tag); err != nil {
 		return err
 	}
 	if err := os.Remove(s.path(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -223,7 +227,7 @@ func (s *Store) Rename(id, newName string, actor Actor) (string, []byte, error) 
 	if !ok {
 		return "", nil, ErrNotFound
 	}
-	if err := checkWrite(actor, rec.source); err != nil {
+	if err := checkWrite(actor, rec.tag); err != nil {
 		return "", nil, err
 	}
 	if newID != id {
@@ -236,7 +240,9 @@ func (s *Store) Rename(id, newName string, actor Actor) (string, []byte, error) 
 		return "", nil, err
 	}
 	doc.Name = newName
-	doc.Source = rec.source
+	doc.Tag = rec.tag
+	doc.Blame = actor.Name
+	doc.Source = ""
 	body, err := encodeDoc(doc)
 	if err != nil {
 		return "", nil, err
@@ -289,7 +295,7 @@ func (s *Store) writeLocked(id string, doc layout.Doc, body []byte) error {
 		summary: doc.Summary(id),
 		body:    body,
 		user:    doc.User,
-		source:  layout.NormalizeSource(doc.Source),
+		tag:     doc.CatalogTag(),
 	}
 	return nil
 }
@@ -305,13 +311,13 @@ func requireApp(actor Actor) error {
 	return nil
 }
 
-func checkWrite(actor Actor, source string) error {
+func checkWrite(actor Actor, tag string) error {
 	if err := requireApp(actor); err != nil {
 		return err
 	}
-	source = layout.NormalizeSource(source)
-	if actor.Write[source] {
+	tag = layout.NormalizeTag(tag)
+	if actor.Write[tag] {
 		return nil
 	}
-	return fmt.Errorf("%w: layout belongs to %s", ErrForbidden, source)
+	return fmt.Errorf("%w: layout belongs to %s", ErrForbidden, tag)
 }

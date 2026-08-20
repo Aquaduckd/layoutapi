@@ -17,7 +17,7 @@ Listens on `:8080`. Override with `-addr`, `-dir`, or `LAYOUTAPI_DIR`.
 
 ## Apps
 
-Each client is an app with its own secret. A layout is stamped with a **tag** (`source` in the JSON), which is not necessarily the app name. Several apps can write the same tag.
+Each client is an app with its own secret. Layouts have a **tag** (who may write) and **blame** (which app last wrote). Several apps can share a tag.
 
 `apps.json` (not committed):
 
@@ -43,7 +43,7 @@ Each client is an app with its own secret. A layout is stamped with a **tag** (`
 }
 ```
 
-- `name` — app id, for revoke and logs
+- `name` — app id, used as `blame` on write, for revoke and logs
 - `secret` — bearer token
 - `tag` — stamped on create; defaults to `name`
 - `write` — tags this app may mutate; defaults to `[tag]`
@@ -56,7 +56,7 @@ Writes send:
 Authorization: Bearer <secret>
 ```
 
-Discord user/admin checks belong to the client. The `user` field is metadata. Existing files with no `source` are treated as `cmini`. Names are globally unique. GET stays public.
+Discord user/admin checks belong to the client. The `user` field is metadata. Existing files with no `tag` are treated as `cmini`. Names are globally unique. GET stays public.
 
 If no apps are configured, writes return 503.
 
@@ -67,7 +67,7 @@ If no apps are configured, writes return 503.
 | `GET` | `/health` | public | count of loaded layouts |
 | `GET` | `/v1/layouts` | public | `q`, `board`, `user`, `limit`, `offset`, `full=1` |
 | `GET` | `/v1/layouts/{name}` | public | full layout JSON |
-| `POST` | `/v1/layouts` | bearer | create; stamps `tag`; 409 if the name exists |
+| `POST` | `/v1/layouts` | bearer | create; stamps `tag` and `blame`; 409 if the name exists |
 | `PUT` | `/v1/layouts/{name}` | bearer | replace; app must be allowed to write that tag |
 | `DELETE` | `/v1/layouts/{name}` | bearer | same |
 | `POST` | `/v1/layouts/{name}/rename` | bearer | body `{"name":"new-name"}` |

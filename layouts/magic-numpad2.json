@@ -69,5 +69,6 @@
             "finger": "RT"
         }
     },
-    "source": "cmini"
+    "tag": "cmini",
+    "blame": "cmini"
 }

@@ -246,8 +246,8 @@ func TestSharedTagAndIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if doc["source"] != "cmini" {
-		t.Fatalf("source %v", doc["source"])
+	if doc["tag"] != "cmini" || doc["blame"] != "dmini" {
+		t.Fatalf("tag/blame %v %v", doc["tag"], doc["blame"])
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, srv.URL+"/v1/layouts/http-demo", nil)

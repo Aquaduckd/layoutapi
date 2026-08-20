@@ -68,8 +68,8 @@ func TestCreateGetDelete(t *testing.T) {
 	if doc.Name != "demo-layout" {
 		t.Fatalf("name %q", doc.Name)
 	}
-	if doc.Source != "dmini" {
-		t.Fatalf("source %q", doc.Source)
+	if doc.Tag != "dmini" || doc.Blame != "dmini" {
+		t.Fatalf("tag %q blame %q", doc.Tag, doc.Blame)
 	}
 	if err := st.Delete(id, app("web")); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
@@ -154,7 +154,8 @@ func TestAppIsolation(t *testing.T) {
 		Name:   "spoof-src",
 		User:   42,
 		Board:  "ortho",
-		Source: "web",
+		Tag:    "web",
+		Blame:  "web",
 		Keys:   map[string]layout.Position{"a": {Row: 0, Col: 0, Finger: "LP"}, "b": {Row: 0, Col: 1, Finger: "LR"}},
 	}
 	spoofRaw, err := layout.Encode(spoof)
@@ -169,16 +170,16 @@ func TestAppIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spoofDoc.Source != "cmini" {
-		t.Fatalf("client source ignored, got %q", spoofDoc.Source)
+	if spoofDoc.Tag != "cmini" || spoofDoc.Blame != "dmini" {
+		t.Fatalf("client tag/blame ignored, got tag=%q blame=%q", spoofDoc.Tag, spoofDoc.Blame)
 	}
 	_ = st.Delete("spoof-src", dmini)
 	doc, err := layout.Parse(raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Source != "cmini" {
-		t.Fatalf("source %q", doc.Source)
+	if doc.Tag != "cmini" || doc.Blame != "dmini" {
+		t.Fatalf("tag %q blame %q", doc.Tag, doc.Blame)
 	}
 
 	if _, err := st.Replace(id, web, sample("app-demo", 42)); !errors.Is(err, ErrForbidden) {
@@ -193,6 +194,17 @@ func TestAppIsolation(t *testing.T) {
 
 	if _, err := st.Replace(id, cmini, sample("app-demo", 42)); err != nil {
 		t.Fatal(err)
+	}
+	updated, err := st.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedDoc, err := layout.Parse(updated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updatedDoc.Tag != "cmini" || updatedDoc.Blame != "cmini" {
+		t.Fatalf("after cmini write tag %q blame %q", updatedDoc.Tag, updatedDoc.Blame)
 	}
 	if err := st.Delete(id, dmini); err != nil {
 		t.Fatal(err)
@@ -236,8 +248,8 @@ func TestOpenCopiedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if doc.Source != "cmini" {
-		t.Fatalf("hours source %q", doc.Source)
+	if doc.Tag != "cmini" {
+		t.Fatalf("hours tag %q", doc.Tag)
 	}
 	if _, err := st.Get("qwerty"); err != nil {
 		t.Fatal(err)
