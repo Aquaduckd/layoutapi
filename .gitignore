@@ -2,3 +2,5 @@
 /layoutapi
 *.exe
 .DS_Store
+tokens.txt
+.env

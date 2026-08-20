@@ -11,13 +11,27 @@ import (
 	"layoutapi/internal/store"
 )
 
+var (
+	errUnauthorized   = errors.New("missing or invalid bearer token")
+	errWritesDisabled = errors.New("writes are disabled: no write tokens are configured")
+	errMissingUser    = errors.New("missing X-User-Id header")
+	errInvalidUser    = errors.New("invalid X-User-Id header")
+)
+
 type Server struct {
 	store *store.Store
+	keys  []hashedKey
 }
 
-func New(st *store.Store) *Server {
-	return &Server{store: st}
+func New(st *store.Store, keys []WriteKey) (*Server, error) {
+	hashed, err := hashKeys(keys)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{store: st, keys: hashed}, nil
 }
+
+func (s *Server) WriteKeyCount() int { return len(s.keys) }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -98,15 +112,15 @@ func (s *Server) get(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(raw)
 }
 
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {
-	actor, err := actorFrom(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+	actor, ok := s.writeActor(w, r)
+	if !ok {
 		return
 	}
 	body, err := readBody(r)
@@ -126,9 +140,8 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) replace(w http.ResponseWriter, r *http.Request) {
-	actor, err := actorFrom(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+	actor, ok := s.writeActor(w, r)
+	if !ok {
 		return
 	}
 	body, err := readBody(r)
@@ -147,9 +160,8 @@ func (s *Server) replace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
-	actor, err := actorFrom(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+	actor, ok := s.writeActor(w, r)
+	if !ok {
 		return
 	}
 	if err := s.store.Delete(r.PathValue("name"), actor); err != nil {
@@ -160,9 +172,8 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
-	actor, err := actorFrom(r)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, err.Error())
+	actor, ok := s.writeActor(w, r)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -183,14 +194,32 @@ func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(stored)
 }
 
+func (s *Server) writeActor(w http.ResponseWriter, r *http.Request) (store.Actor, bool) {
+	if err := s.authorizeWrite(r.Header.Get("Authorization")); err != nil {
+		status := http.StatusUnauthorized
+		if errors.Is(err, errWritesDisabled) {
+			status = http.StatusServiceUnavailable
+		}
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		writeError(w, status, err.Error())
+		return store.Actor{}, false
+	}
+	actor, err := actorFrom(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return store.Actor{}, false
+	}
+	return actor, true
+}
+
 func actorFrom(r *http.Request) (store.Actor, error) {
 	raw := strings.TrimSpace(r.Header.Get("X-User-Id"))
 	if raw == "" {
-		return store.Actor{}, errors.New("missing X-User-Id header")
+		return store.Actor{}, errMissingUser
 	}
 	user, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
-		return store.Actor{}, errors.New("invalid X-User-Id header")
+		return store.Actor{}, errInvalidUser
 	}
 	admin := strings.EqualFold(r.Header.Get("X-Admin"), "true")
 	return store.Actor{User: user, Admin: admin}, nil
@@ -228,6 +257,9 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	if status == http.StatusOK || status == http.StatusCreated {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
